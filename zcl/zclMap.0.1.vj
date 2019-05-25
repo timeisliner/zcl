@@ -1,0 +1,148 @@
+/*
+zclMap.0.1.vj 2018-5-12 15:10:41
+
+0. copy >> F:\app\war3\lib\xe\extra\BoundSentinel.vj
+*/
+
+/*
+lib requires
+
+
+lib optional
+
+*/
+
+/*
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+
+*/
+
+/*
+Don't leave your units unsupervised, naughty them may try to get out of the map bounds and crash your game.
+
+地图相关及设定
+  setPlayableMapArea() >> 自动将单位限制在可游戏的区域
+*/
+library zclMap initializer init
+
+globals
+  // 将单位限制在 可游戏的地图范围内
+  private constant boolean PLAYABLE_MAP_AREA_LIMIT = true
+  
+  private real MinX
+  private real MinY
+  private real MaxX
+  private real MaxY
+
+endglobals
+
+// 防止单位离开 可游戏的地图范围
+private function onOutMapLimit takes nothing returns boolean
+  local unit uptarget = GetTriggerUnit()
+  local real rpx = GetUnitX(uptarget)
+  local real rpy = GetUnitY(uptarget)
+  
+  if rpx > MaxX then
+    set rpx = MaxX
+  elseif rpx < MinX  then
+    set rpx = MinX
+  endif
+  if rpy > MaxY) then
+    set rpy = MaxY
+  elseif rpy < MinY then
+    set rpy = MinY
+  endif
+  
+  call SetUnitX(uptarget, rpx)
+  call SetUnitY(uptarget, rpy)
+  
+  set uptarget = null
+  return false
+endfunction
+
+
+struct zclMaps
+  static method create takes integer aired, real ary, boolean abc returns thistype
+    local thistype ttps = thistype.allocate()
+    if ttps == 0 then
+      return 0
+    endif
+    
+    set ttps.red = aired
+    set ttps.rpy = ary
+    set ttps.c = abc
+    
+    return ttps
+  endmethod
+  
+  method destroy takes nothing returns nothing
+    if this != 0 then
+      
+      
+      // 在手动解析之后 调用系统解析 回收编号
+      call this.deallocate()
+    endif
+    debug call zclDebugs.log("结构名 ... destroyed!")
+  endmethod
+
+
+endstruct
+
+
+
+globals
+  // switch
+  private boolean Ready = false
+endglobals
+
+private function setPlayableMapArea takes nothing returns nothing
+  local trigger trgplimit = CreateTrigger()
+  local region  regplimit = CreateRegion()
+  local rect recpmap
+  local rect recptemp
+  
+  if PLAYABLE_MAP_AREA_LIMIT then
+    set recpmap = bj_mapInitialPlayableArea
+  else
+    set recpmap = GetWorldBounds()
+  endif
+  set MinX = GetRectMinX(recpmap)
+  set MinY = GetRectMinY(recpmap)
+  set MaxX = GetRectMaxX(recpmap)
+  set MaxY = GetRectMaxY(recpmap)
+  
+  // 避免删掉 bj_mapInitialPlayableArea
+  set recptemp = Rect(MinX, MinY, MaxX, MaxY)
+  call RegionAddRect(regplimit, recptemp)
+  call RemoveRect(recptemp)
+  
+  if not PLAYABLE_MAP_AREA_LIMIT then
+    call RemoveRect(recpmap)
+  endif
+  
+  call TriggerRegisterLeaveRegion(trgplimit, regplimit, null)
+  call TriggerAddCondition(trgplimit, Condition(function onOutMapLimit))
+  
+  set recpmap = null
+  set recptemp = null
+endfunction
+
+private function init takes nothing returns nothing
+  // prevent reinit
+  if Ready then
+    return
+  endif
+
+  // setPlayableMapArea
+  call setPlayableMapArea()
+  
+  // switch off
+  set Ready = true
+endfunction
+
+
+endlibrary
+
+
+

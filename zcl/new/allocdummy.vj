@@ -1,0 +1,94 @@
+  
+  
+  private method alloc takes unit adummy returns nothing
+    if .MrecycleDelay < Epsilon then
+      // 立即效果
+      set adummy = SdummyInstance   // 设置 假态单位实例
+      call SetUnitOwner(adummy, .Mowner, false)  // 将 假态单位 转给 技能施放单位所属玩家
+    elseif SdummyStackVernier > 0 then // 栈中有值
+      // 持续效果 且 假态单位的实例缓存队列中 存在 假态实例
+      // 取得最顶端的 假态实例
+      set SdummyStackVernier = SdummyStackVernier - 1
+      set adummy = SdummyStack[SdummyStackVernier]
+      call SetUnitOwner(adummy, .Mowner, false)
+    else
+      // 持续效果 且 假态单位的实例缓存队列中 没有 假态实例
+      // 创建一个新的 假态实例
+      set adummy = CreateUnit(.Mowner , zclXBasic_Dummy_Unit_ID, 0, 0, 0)
+      call TriggerRegisterUnitEvent(StrgAbilityRemove, adummy, EVENT_UNIT_SPELL_ENDCAST)
+      call UnitAddAbility(adummy, 'Aloc')   // 蝗虫技能
+      call UnitAddAbility(adummy, zclXBasic_Height_Model)
+      call UnitRemoveAbility(adummy, zclXBasic_Height_Model)
+    endif
+    call UnitAddAbility(adummy, .MabilityID)
+    static if AUTO_RESET_MANA_COOLDOWN then
+        call UnitResetCooldown(adummy)
+        call SetUnitState(adummy, UNIT_STATE_MANA, 10000.0)
+    endif
+    if .MabilityLv > 1 then
+        call SetUnitAbilityLevel(adummy, .MabilityID, .MabilityLv)
+    endif
+  endmethod
+  
+  private method onTarget takes unit adummy, unit atarget returns nothing
+    if .Msource then
+      call SetUnitX(adummy, .MsourceX)
+      call SetUnitY(adummy, .MsourceY)
+      call SetUnitFlyHeight(adummy, .MsourceZ, 0.0)
+    else
+      call SetUnitX(adummy, GetWidgetX(atarget))
+      call SetUnitY(adummy, GetWidgetY(atarget))
+    endif
+    static if Force_Visible then  // 默认可见
+      // 可见
+      call IssueTargetOrderById(adummy, .MorderID, atarget)
+    else
+      // 不可见
+      call UnitShareVision(atarget, .Mowner, true)
+      call IssueTargetOrderById(adummy, .MorderID, atarget)
+      call UnitShareVision(atarget, .Mowner, false)
+    endif
+  endmethod
+
+  private method dealloc takes unit adummy returns nothing
+    if .MrecycleDelay >= Epsilon then // 回收延迟 大于 最小精度
+      // 持续效果
+      set Scexpire = TimerGetElapsed(SgameTimer) + .MrecycleDelay // 记录 持续效果到期时间
+      set Scurrent = Snext
+      set Snext = Snext + 1
+      loop
+        exitwhen Scurrent == 0    // 队列中只有一个 假态
+        set Scparent = (Scurrent - 1) / 2 // 取得队列中间位置的 假态
+        exitwhen SexpireTime[Scparent] <= Scexpire // 小于等于 退出
+        // 如果 中间假态的持续时间 大于 当前假态的持续时间     换位
+        set SrecycleUnit[Scurrent] = SrecycleUnit[Scparent]
+        set SexpireTime[Scurrent]= SexpireTime[Scparent]
+        set Scurrent = Scparent // 排换索引号
+      endloop
+      set SexpireTime[Scurrent] = Scexpire      // 存储当前索引 持续效果到期时间
+      set SrecycleUnit[Scurrent] = adummy       // 存储当前索引 假态
+      call SetUnitUserData(adummy, .MabilityID)
+      call TimerStart(Stimer, SexpireTime[0] - TimerGetElapsed(SgameTimer), false, function thistype.dorecycle)
+    else
+      // 立即效果
+      call SetUnitUserData(adummy, 0)
+      call SetUnitFlyHeight(adummy, 0, 0)
+      call UnitRemoveAbility(adummy, .MabilityID)
+    endif
+  endmethod
+  method castOnTarget takes unit atarget returns nothing
+    local unit updummy
+    
+    call .alloc(updummy)
+    
+    call .onTarget(updummy, atarget)
+    
+    call .dealloc(updummy)
+    
+    if MautoDestroy then
+      call this.destroy()
+    endif
+    
+    set updummy = null
+  endmethod
+  

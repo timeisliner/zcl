@@ -1,0 +1,209 @@
+/*
+zclLinkedList.0.1.vj 2018-5-15 11:28:28
+
+*/
+
+/*
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+
+*/
+
+/*
+zclLinkedList 固定大小的链表，最多存储8192个子项，而且，一次只能存在一个链表，如果要再次使用，必须新建 存储链表值的结构或者其他
+简单的说，只能实例化一个链表 再次实例化 依然还是原来那个，所以必须 复制粘贴 改名字
+
+MAX_LENGTH    integer     链表最大长度 JASS_MAX_ARRAY_SIZE
+INVALID       integer     表示 无效的链表子项索引
+
+struct
+  zclLinkedListUnits - private - 链表 单元
+    static
+      create()thistype
+    destroy()
+    
+    g   prev         integer
+    g   next         integer
+    g   index        integer
+    
+
+  zclLinkedLists - extends array - 链表
+    static
+      reset() 清空列表
+      remove(integer)
+      insert(integer)
+      [integer]               get     获取
+      [integer]= thistype     replace 替换
+      create()thistype  该方法无效果
+    destroy() 该方法无效果
+    
+
+*/
+
+
+
+library zclLinkedList
+
+globals
+  private constant integer MAX_LENGTH = JASS_MAX_ARRAY_SIZE // 8192
+  private constant integer INVALID = -1
+  
+  private integer array PrevIndexs[MAX_LENGTH]  // 这里放的是对应水位最喜欢的上一个水位
+  private integer array NextIndexs[MAX_LENGTH]  // 这里放的是对应水位最喜欢的下一个水位
+  
+  private integer Vernier = INVALID // 水桶的当前水位 INVALID >> 无效的水位标记，即表示水量为 0
+  private integer Count   = 0       // 水桶的当前水量
+
+  private zclLinkedLists list = 0
+endglobals
+// 链表 单位 或者说子项
+private struct zclLinkedListUnits
+//! textmacro TM_zclLinkedListUnits_DSG takes METHOD, TYPE, VALUE, MEMBER
+  private $TYPE$ $MEMBER$ = $VALUE$             
+  method operator $METHOD$ takes nothing returns $TYPE$
+    return this.$MEMBER$
+  endmethod
+  method operator $METHOD$= takes $TYPE$ a$MEMBER$ returns nothing
+    set this.$MEMBER$ = a$MEMBER$
+  endmethod
+//! endtextmacro
+//! runtextmacro TM_zclLinkedListUnits_DSG("prev", "integer", "INVALID", "Mprev")
+//! runtextmacro TM_zclLinkedListUnits_DSG("next", "integer", "INVALID", "Mnext")
+//! runtextmacro TM_zclLinkedListUnits_DSG("index", "integer", "INVALID", "Mindex")
+  // 构造函数
+  static method create takes nothing returns thistype
+    local thistype ttps = thistype.allocate()
+    if ttps == 0 then
+      debug call zclDebugs.log("严重错误: zclLinkedListUnits ... 创建失败...有没有对不需要的结构实例放任不管？？")
+      return 0
+    endif
+    return ttps
+  endmethod
+
+  // 解析函数
+  method destroy takes nothing returns nothing
+    if this != 0 then
+      // 在手动解析之后 调用系统解析 回收编号
+      call this.deallocate()
+    endif
+    debug call zclDebugs.log("zclLinkedListUnits ... destroyed!")
+  endmethod
+endstruct
+
+struct zclLinkedLists extends array
+  // 获取 get
+  private static method operator [] takes integer ai returns zclLinkedListUnits
+    return 
+  endmethod
+  // replace 替换
+  static method operator []= takes integer aiold, integer ainew returns nothing
+
+  
+  endmethod
+  static method remove takes integer ai returns nothing
+    local integer ipprev = 0
+    local integer ipnext = 0
+  
+    if ai > Vernier or ai < 0 then
+      debug call zclDebugs.log("你对水桶的要求太过分啦！！水桶当前水量: " + I2S(Count) + " 当前水位: " + I2S(Vernier) + " 你要干掉的水位: " + I2S(ai))
+      return
+    endif
+    
+    // 恭喜你 你的要求是合理的
+    
+    // 拿到 ai 水位 最喜欢的上一个水位 ipprev 和下一个水位 ipnext
+    set ipprev = PrevIndexs[ai]
+    set ipnext = NextIndexs[ai]
+    // 让 ipprev 和 ipnext 互相喜欢起来
+    set NextIndexs[ipprev] = ipnext
+    set PrevIndexs[ipnext] = ipprev
+    // 因为这里的水只会空降插队 所以 ai 腾出来的位子会被最后一个家伙抢占 因此 外部数据也必须进行一样的插队操作 不然索引会对不上
+    set PrevIndexs[ai] = PrevIndexs[Vernier]
+    set NextIndexs[ai] = NextIndexs[Vernier]
+    // 删除掉已经没用了的水位
+    set PrevIndexs[Vernier] = 0
+    set NextIndexs[Vernier] = 0
+    // 水位降低一个单位 总水量降低一个单位
+    set Vernier = Vernier - 1
+    set Count = Count - 1
+    endmethod
+  static method insert takes integer ai returns nothing
+  endmethod
+  
+  // 无效果 返回固定值>>唯一实例
+  static method create takes nothing returns thistype
+    return 0
+  endmethod
+  // 无效
+  method destroy takes nothing returns nothing
+    debug call zclDebugs.log("不能使用 destroy方法销毁zclLinkedListUnits实例 必须使用 reset方法")
+  endmethod
+endstruct
+
+library zclLinkedList
+
+
+struct zclLinkedLists
+
+
+
+endstruct
+
+private constant integer MAX_LENGTH = JASS_MAX_ARRAY_SIZE // 8192
+private constant integer INVALID = -1
+
+
+private integer array PrevIndexs[MAX_LENGTH]  // 这里放的是对应水位最喜欢的上一个水位
+private integer array NextIndexs[MAX_LENGTH]  // 这里放的是对应水位最喜欢的下一个水位
+
+private integer Vernier = INVALID // 水桶的当前水位 INVALID >> 无效的水位标记，即表示水量为 0
+private integer Count   = 0       // 水桶的当前水量
+
+
+private function insert takes integer ai returns nothing
+  local integer ipprev = 0
+  local integer ipnext = 0
+  
+  if Count >= MAX_LENGTH 
+  
+  // 有新来的家伙竟然要把屁股对准 ai 还要抢走 ai 最喜欢的上一个水位 ipprev 更过分的是还要强迫 ai 把它作为 ai 最喜欢的上一个水位
+  // 拿到 ai 水位 最喜欢的上一个水位 ipprev 和下一个水位 ipnext
+  set ipprev = PrevIndexs[ai]
+  set ipnext = NextIndexs[ai]
+endfunction
+
+private function remove takes integer ai returns nothing
+  local integer ipprev = 0
+  local integer ipnext = 0
+
+  if ai > Vernier or ai < 0 then
+    debug call zclDebugs.log("你对水桶的要求太过分啦！！水桶当前水量: " + I2S(Count) + " 当前水位: " + I2S(Vernier) + " 你要干掉的水位: " + I2S(ai))
+    return
+  endif
+  
+  // 恭喜你 你的要求是合理的
+  
+  // 拿到 ai 水位 最喜欢的上一个水位 ipprev 和下一个水位 ipnext
+  set ipprev = PrevIndexs[ai]
+  set ipnext = NextIndexs[ai]
+  // 让 ipprev 和 ipnext 互相喜欢起来
+  set NextIndexs[ipprev] = ipnext
+  set PrevIndexs[ipnext] = ipprev
+  // 因为这里的水只会空降插队 所以 ai 腾出来的位子会被最后一个家伙抢占 因此 外部数据也必须进行一样的插队操作 不然索引会对不上
+  set PrevIndexs[ai] = PrevIndexs[Vernier]
+  set NextIndexs[ai] = NextIndexs[Vernier]
+  // 删除掉已经没用了的水位
+  set PrevIndexs[Vernier] = 0
+  set NextIndexs[Vernier] = 0
+  // 水位降低一个单位 总水量降低一个单位
+  set Vernier = Vernier - 1
+  set Count = Count - 1
+endfunction
+
+
+
+endstruct
+
+endlibrary
+
+

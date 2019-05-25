@@ -1,0 +1,63 @@
+//**********************************************
+//* Rune of Illusions
+//*
+//* testzclXSpellCasts.0.1.vj
+//*
+//*
+//* A quick sample for xecast
+//*
+//*
+//I003 : rune of illusion
+//A009 : Illusions (dummy)
+//----------------------------------------------
+scope testzclXSpellCasts initializer init
+
+    private function itemIdMatch takes nothing returns boolean  //If the id of the pickup item
+      return (  GetItemTypeId(GetManipulatedItem()) == 'I003' ) //matches I003 ...
+    endfunction                                                 //
+
+    //====================================================
+    //: This time we'll use a single xecast instance for
+    //: all the cases the rune is used. It is recommended
+    //: to do this since it is more efficient.
+    //
+    globals                 // :We begin by actually declaring our cast global
+        private zclXSpellCasts cast // variable
+    endglobals              //
+    private function setItUp takes nothing returns nothing //: In this function,
+        set cast = zclXSpellCasts.create()                         //  we do some basic setup
+        set cast.MabilityID = 'A009'  //The ability Id for our dummy illusions ability
+        set cast.oidint   = 852274  //The order id.
+        //: The illusions ability is a special case since it does not have an orderstring
+        //  so we are just going to use its order id, every active ability has one,
+        // I got the id using a detector trigger, but most people would prefer to use
+        // the order id guide: http://www.wc3campaigns.net/tools/weu/ORDERIDS.xls
+        //
+        //
+        //
+    endfunction
+
+    private function onItemPick takes nothing returns nothing
+     local unit     u   = GetTriggerUnit()
+
+        set cast.Mowner = GetOwningPlayer(u) //* The owning player, determines who will own the illusion.
+        call cast.castOnTarget( u )  //Let's call the castOnTarget method on the Triggering unit.
+        call zclDebugs.log("MabilityID" + I2S(cast.MabilityID))
+        call zclDebugs.log("oidint" + I2S(cast.oidint))
+     set u=null
+    endfunction
+
+
+    private function init takes nothing returns nothing
+     local trigger t=CreateTrigger() //The usual Trigger registering
+       call TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_PICKUP_ITEM) //: Unit pickups item
+       call TriggerAddCondition(t, Condition(function itemIdMatch))         //:
+       call TriggerAddAction(t, function onItemPick)
+
+       call setItUp() //call our xecast setup function...
+    endfunction
+
+endscope
+
+
+

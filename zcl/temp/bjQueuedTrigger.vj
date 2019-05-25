@@ -1,0 +1,221 @@
+     constant real      bj_QUEUE_DELAY_QUEST             =  5.00
+    constant real      bj_QUEUE_DELAY_HINT              =  5.00
+    constant real      bj_QUEUE_DELAY_SECRET            =  3.00
+  
+  
+  // QueuedTriggerExecute settings
+    constant integer   bj_MAX_QUEUED_TRIGGERS           = 100
+    constant real      bj_QUEUED_TRIGGER_TIMEOUT        = 180.00
+ 
+ 
+ // QueuedTriggerExecute vars
+    integer            bj_queuedExecTotal          = 0
+    trigger array      bj_queuedExecTriggers
+    boolean array      bj_queuedExecUseConds
+    timer              bj_queuedExecTimeoutTimer   = CreateTimer()
+    trigger            bj_queuedExecTimeout        = null
+ 
+ 
+ 
+ //===========================================================================
+// Debug - Display the contents of the trigger queue (as either null or "x"
+// for each entry).
+function QueuedTriggerCheck takes nothing returns nothing
+    local string s = "TrigQueue Check "
+    local integer i
+
+    set i = 0
+    loop
+        exitwhen i >= bj_queuedExecTotal
+        set s = s + "q[" + I2S(i) + "]="
+        if (bj_queuedExecTriggers[i] == null) then
+            set s = s + "null "
+        else
+            set s = s + "x "
+        endif
+        set i = i + 1
+    endloop
+    set s = s + "(" + I2S(bj_queuedExecTotal) + " total)"
+    call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,600,s)
+endfunction
+
+//===========================================================================
+// Searches the queue for a given trigger, returning the index of the
+// trigger within the queue if it is found, or -1 if it is not found.
+//
+function QueuedTriggerGetIndex takes trigger trig returns integer
+    // Determine which, if any, of the queued triggers is being removed.
+    local integer index     = 0
+    loop
+        exitwhen index >= bj_queuedExecTotal
+        if (bj_queuedExecTriggers[index] == trig) then
+            return index
+        endif
+        set index = index + 1
+    endloop
+    return -1
+endfunction
+
+//===========================================================================
+// Removes a trigger from the trigger queue, shifting other triggers down
+// to fill the unused space.  If the currently running trigger is removed
+// in this manner, this function does NOT attempt to run the next trigger.
+//
+function QueuedTriggerRemoveByIndex takes integer trigIndex returns boolean
+    local integer index
+
+    // If the to-be-removed index is out of range, fail.
+    if (trigIndex >= bj_queuedExecTotal) then
+        return false
+    endif
+
+    // Shift all queue entries down to fill in the gap.
+    set bj_queuedExecTotal = bj_queuedExecTotal - 1
+    set index = trigIndex
+    loop
+        exitwhen index >= bj_queuedExecTotal
+        set bj_queuedExecTriggers[index] = bj_queuedExecTriggers[index + 1]
+        set bj_queuedExecUseConds[index] = bj_queuedExecUseConds[index + 1]
+        set index = index + 1
+    endloop
+    return true
+endfunction
+
+//===========================================================================
+// Attempt to execute the first trigger in the queue.  If it fails, remove
+// it and execute the next one.  Continue this cycle until a trigger runs,
+// or until the queue is empty.
+//
+function QueuedTriggerAttemptExec takes nothing returns boolean
+    loop
+        exitwhen bj_queuedExecTotal == 0
+
+        if TriggerExecuteBJ(bj_queuedExecTriggers[0], bj_queuedExecUseConds[0]) then
+            // Timeout the queue if it sits at the front of the queue for too long.
+            call TimerStart(bj_queuedExecTimeoutTimer, bj_QUEUED_TRIGGER_TIMEOUT, false, null)
+            return true
+        endif
+
+        call QueuedTriggerRemoveByIndex(0)
+    endloop
+    return false
+endfunction
+
+//===========================================================================
+// Queues a trigger to be executed, assuring that such triggers are not
+// executed at the same time.
+//
+function QueuedTriggerAddBJ takes trigger trig, boolean checkConditions returns boolean
+    // Make sure our queue isn't full.  If it is, return failure.
+    if (bj_queuedExecTotal >= bj_MAX_QUEUED_TRIGGERS) then
+        return false
+    endif
+
+    // Add the trigger to an array of to-be-executed triggers.
+    set bj_queuedExecTriggers[bj_queuedExecTotal] = trig
+    set bj_queuedExecUseConds[bj_queuedExecTotal] = checkConditions
+    set bj_queuedExecTotal = bj_queuedExecTotal + 1
+
+    // If this is the only trigger in the queue, run it.
+    if (bj_queuedExecTotal == 1) then
+        call QueuedTriggerAttemptExec()
+    endif
+    return true
+endfunction
+
+//===========================================================================
+// Denotes the end of a queued trigger. Be sure to call this only once per
+// queued trigger, or risk stepping on the toes of other queued triggers.
+//
+function QueuedTriggerRemoveBJ takes trigger trig returns nothing
+    local integer index
+    local integer trigIndex
+    local boolean trigExecuted
+
+    // Find the trigger's index.
+    set trigIndex = QueuedTriggerGetIndex(trig)
+    if (trigIndex == -1) then
+        return
+    endif
+
+    // Shuffle the other trigger entries down to fill in the gap.
+    call QueuedTriggerRemoveByIndex(trigIndex)
+
+    // If we just axed the currently running trigger, run the next one.
+    if (trigIndex == 0) then
+        call PauseTimer(bj_queuedExecTimeoutTimer)
+        call QueuedTriggerAttemptExec()
+    endif
+endfunction
+ 
+
+
+
+//===========================================================================
+// Denotes the end of a queued trigger. Be sure to call this only once per
+// queued trigger, lest you step on the toes of other queued triggers.
+//
+function QueuedTriggerDoneBJ takes nothing returns nothing
+    local integer index
+
+    // Make sure there's something on the queue to remove.
+    if (bj_queuedExecTotal <= 0) then
+        return
+    endif
+
+    // Remove the currently running trigger from the array.
+    call QueuedTriggerRemoveByIndex(0)
+
+    // If other triggers are waiting to run, run one of them.
+    call PauseTimer(bj_queuedExecTimeoutTimer)
+    call QueuedTriggerAttemptExec()
+endfunction
+
+//===========================================================================
+// Empty the trigger queue.
+//
+function QueuedTriggerClearBJ takes nothing returns nothing
+    call PauseTimer(bj_queuedExecTimeoutTimer)
+    set bj_queuedExecTotal = 0
+endfunction
+
+//===========================================================================
+// Remove all but the currently executing trigger from the trigger queue.
+//
+function QueuedTriggerClearInactiveBJ takes nothing returns nothing
+    set bj_queuedExecTotal = IMinBJ(bj_queuedExecTotal, 1)
+endfunction
+
+//===========================================================================
+function QueuedTriggerCountBJ takes nothing returns integer
+    return bj_queuedExecTotal
+endfunction
+
+//===========================================================================
+function IsTriggerQueueEmptyBJ takes nothing returns boolean
+    return bj_queuedExecTotal <= 0
+endfunction
+
+//===========================================================================
+function IsTriggerQueuedBJ takes trigger trig returns boolean
+    return QueuedTriggerGetIndex(trig) != -1
+endfunction
+
+ 
+ // Init Trigger Queue
+    set index = 0
+    loop
+        exitwhen index >= bj_MAX_QUEUED_TRIGGERS
+        set bj_queuedExecTriggers[index] = null
+        set bj_queuedExecUseConds[index] = false
+        set index = index + 1
+    endloop
+
+function InitQueuedTriggers takes nothing returns nothing
+    set bj_queuedExecTimeout = CreateTrigger()
+    call TriggerRegisterTimerExpireEvent(bj_queuedExecTimeout, bj_queuedExecTimeoutTimer)
+    call TriggerAddAction(bj_queuedExecTimeout, function QueuedTriggerDoneBJ)
+endfunction
+
+
+call InitQueuedTriggers()

@@ -1,0 +1,37 @@
+/*
+zclXBasic.0.1.vj 2018-5-13 9:03:03
+
+0. copy >> F:\app\war3\lib\xe\libs\xebasic 0.4.vj
+
+*/
+
+/*
+技能施放系统 全局设定
+zclXBasic_Dummy_Unit_ID         替代施放技能的 假态单位
+                                数据相见 物体编辑器 xe unit Caster System
+zclXBasic_Height_Model          技能施放高度所参考的模型
+                                这里使用麦迪文乌鸦形态技能 'Amrf'
+zclXBasic_Tree_Model            为识别技能目标为树木时所参考的模型
+                                这里使用暗夜精灵建筑吞食树木 'Aeat'
+zclXBasic_Animation_Period      技能动画频率
+                                越小  越快  效果看起来越好  性能影响越大
+                                越大  越慢  效果看起来越差  性能影响越小
+zclXBasic_Max_Collision         最大碰撞体积
+                                如果单位体积超过该值，则不会被检测到
+                                如果单位体积远小于该值，会降低性能
+*/
+
+library zclXBasic
+
+globals
+  constant integer zclXBasic_Dummy_Unit_ID        = 'e000'
+  constant integer zclXBasic_Height_Model         = 'Amrf'
+  constant integer zclXBasic_Tree_Model           = 'Aeat'
+  constant real    zclXBasic_Animation_Period     = 0.025
+  constant real    zclXBasic_Max_Collision        = 197.0
+endglobals
+endlibrary
+
+
+
+

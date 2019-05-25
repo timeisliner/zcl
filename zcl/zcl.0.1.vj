@@ -1,0 +1,143 @@
+/*
+zcl.0.1.vj 2018-5-11 14:36:35
+
+0. 版本 
+1. 说明详见 zc.js 主要内容如下：
+  1.1   命名
+    1.1.1 九类名称命名规则：方法+变量
+    1.1.2 常用方法名列表
+  1.2  文本宏 TM
+    1.2.1 TM_结构名_ED 
+    1.2.2 TM_结构名_DSG 
+    1.2.3 TM_结构名_IS 
+    1.2.4 TM_结构名_OP
+  1.3   初始化 构造器 解析器
+    1.3.1 初始化
+    1.3.2 构造解析
+  1.4   语法要点
+*/
+
+/*
+lib requires
+
+
+lib optional
+
+*/
+
+/*
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+
+*/
+
+/*
+说明：Zone Center | Zone Code >> library
+
+struct
+  zclTMTimers - 计时器
+    static
+      create()thistype
+    destroy()
+    
+    g   id          integer
+    g   elapsed     real
+    g   remaining   real
+    g   timeout     real
+    
+    
+    start(real, boolean, code)
+    on()
+    off()
+    isOn()boolean
+    isValid()boolean
+    
+  zclTMDialogs - 计时器窗口
+    static
+      create()thistype
+    destroy()
+    
+    g   id          integer
+    sg  title       string
+    sg  speed       real
+    sg  remain      real
+    
+    on()
+    off()
+    show()
+    hide()
+    isOn()
+    isShow()
+    
+    // 测试用
+    status()
+    run()
+*/
+
+
+
+library zclName initializer init requires zclA optional zclB
+
+globals
+  constant integer zclName_Example = -1
+  
+  private constant string DEFAULT_TITLE = "Zone Center Library"
+  
+  private real WaveCount = 10.
+endglobals
+
+// useless
+struct zclNames
+
+
+
+  // 构造函数
+  static method create takes nothing returns thistype
+    local thistype ttps = thistype.allocate()
+    if ttps == 0 then
+      debug call zclDebugs.log("严重错误: 结构名 ... 创建失败...请留意是否已经将不需要的 结构名 回收了!!!")
+      return 0
+    endif
+  
+    return ttps
+  endmethod
+
+  // 解析函数
+  method destroy takes nothing returns nothing
+    // 在手动解析之后 调用系统解析
+    call this.deallocate()
+    if this != 0 then
+      
+      
+      // 在手动解析之后 调用系统解析 回收编号
+      call this.deallocate()
+    endif
+    debug call zclDebugs.log("结构名 ... destroyed!")
+  endmethod
+
+
+endstruct
+
+
+
+
+globals
+  // switch
+  private boolean Ready = false
+endglobals
+
+private function init takes nothing returns nothing
+  // prevent reinit
+  if Ready then
+    return
+  endif
+  
+  
+  // switch off
+  set Ready = true
+endfunction
+
+
+endlibrary
+
+

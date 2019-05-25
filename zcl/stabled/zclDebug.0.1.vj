@@ -1,0 +1,28 @@
+/*
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+0. copy >> zcDebug.0.4.vj 2018-5-9 20:13:21
+1. 测试打印
+*/
+
+/*
+struct
+  zclDebugs
+    static
+      log(string)
+*/
+
+library zclDebug
+
+globals
+  private constant string TITLE_FORMATTED = "|cffff0000[测试]|r "
+endglobals
+
+struct zclDebugs
+  static method log takes string astext returns nothing
+    call BJDebugMsg(TITLE_FORMATTED + astext)
+  endmethod
+endstruct
+
+endlibrary
+

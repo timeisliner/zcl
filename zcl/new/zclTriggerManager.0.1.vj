@@ -1,0 +1,111 @@
+/* 
+zclTriggerManager.0.1.vj 2018-5-11 16:46:07
+
+0. copy >> zcTrigger.0.1.vj 2018-5-7 19:03:14
+
+*/
+
+
+/*
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+*/
+
+/*
+集合common.j 中较为常用且与 trigger 相关的api
+
+struct
+  zclTriggers
+    static
+      create()thistype
+    destroy()
+    
+    g     trg       trigger
+    
+    
+    on()
+    off()
+    sleep()
+    waken()
+    reset()
+    isOn()boolean
+    isSleep()boolean
+    
+    
+*/
+
+library zclTriggerManager initializer init
+
+globals
+  private constant integer Max = 100          // bj_MAX_QUEUED_TRIGGERS
+  private constant real Timeout = 180.00      // bj_QUEUED_TRIGGER_TIMEOUT
+  
+endglobals
+
+
+struct zclTriggers
+  private trigger Mtrigger = null
+
+  method operator trg takes nothing returns trigger
+    return this.Mtrigger
+  endmethod
+  
+  // 启用 禁用 睡眠 唤醒 触发器
+//! textmacro TM_zclTriggers_ED takes METHOD, IS, API
+  method $METHOD$ takes nothing returns nothing
+    if this.$IS$() then
+      call $API$
+    endif
+  endmethod
+//! endtextmacro
+//! runtextmacro TM_zclTriggers_ED("on", "isOff", "EnableTrigger(this.Mtrigger)")      // 启用
+//! runtextmacro TM_zclTriggers_ED("off", "isOn", "DisableTrigger(this.Mtrigger)")    // 禁用
+//! runtextmacro TM_zclTriggers_SW("sleep", "isWaken", "TriggerWaitOnSleeps(this.Mtrigger, true)")      // 睡眠
+//! runtextmacro TM_zclTriggers_SW("waken", "isSleep", "TriggerWaitOnSleeps(this.Mtrigger, false)")     // 唤醒
+
+  // 重置 触发器
+  method reset takes nothing returns nothing
+    call ResetTrigger(this.Mtrigger)
+  endmethod
+
+//! textmacro TM_zclTriggers_IS takes METHOD, API
+  method $METHOD$ takes nothing returns boolean
+    return $EXP$(this.Mtrigger)
+  endmethod 
+//! endtextmacro
+//! runtextmacro TM_zclTriggers_IS("isOn", "IsTriggerEnabled")
+//! runtextmacro TM_zclTriggers_IS("isSleep", "IsTriggerWaitOnSleeps")
+  
+  // 构造函数
+  static method create takes nothing returns thistype
+    local thistype ttps = thistype.allocate()
+    if ttps == 0 then
+      debug call zclDebugs.log("严重错误: zclTriggers ... 创建失败...请留意是否已经将不需要的 zclTriggers 回收了!!!")
+      return 0
+    endif
+    
+    set ttps.Mtrigger = CreateTrigger()
+  
+    return ttps
+  endmethod
+
+  // 解析函数
+  method destroy takes nothing returns nothing
+    if this.Mtrigger != null then
+      call DestroyTrigger(this.Mtrigger)
+      set this.Mtrigger = null
+    endif
+    // 在手动解析之后 调用系统解析 回收编号
+    call this.deallocate()
+    debug call zclDebugs.log("zclTriggers ... destroyed!")
+  endmethod
+endstruct
+
+
+private function init takes nothing returns nothing
+
+endfunction
+
+
+endlibrary
+

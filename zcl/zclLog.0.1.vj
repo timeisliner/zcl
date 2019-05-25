@@ -1,0 +1,127 @@
+/* 
+zclLog.0.1.vj 2018-5-11 16:03:03
+
+0. copy >> zcOutput.0.2.vj 2018-5-4 20:49:19
+
+*/
+
+/*
+lib requires
+zclPoint.0.1.vj 2018-5-11 15:56:32
+
+*/
+
+/*
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+*/
+
+/*
+屏幕消息打印
+struct
+  zclLogs 
+    create(force)   
+    destroy()
+    
+    log()    注意 不能一次性输出太多消息，这会让游戏对你喊88，最好低于1000，实际上一次性打印30条消息就能上天了
+    logs(string)
+    
+    sg zclPoints point
+    sg real      duration
+    sg string    message
+    sg force     team
+*/
+
+library zclLog initializer init requires zclPoint
+
+globals
+  constant real zclLog_DURATION = 20.
+  constant real zclLog_MAX_DURATION = 300.
+  
+  private force DefaultForce = CreateForce()
+endglobals
+
+struct zclLogs
+//! textmacro TM_zclLogs_DSG takes METHOD, TYPE, VALUE, MEMBER
+  private $TYPE$ $MEMBER$ = $VALUE$             
+  method operator $METHOD$ takes nothing returns $TYPE$
+    return this.$MEMBER$
+  endmethod
+  method operator $METHOD$= takes $TYPE$ a$MEMBER$ returns nothing
+    set this.$MEMBER$ = a$MEMBER$
+  endmethod
+//! endtextmacro
+//! runtextmacro TM_zclLogs_DSG("point", "zclPoints", "0", "Mpoint")
+//! runtextmacro TM_zclLogs_DSG("duration", "real", "20", "Mduration")
+//! runtextmacro TM_zclLogs_DSG("message", "string", "\"无消息\"", "Mmessage")
+//! runtextmacro TM_zclLogs_DSG("team", "force", "null", "Mteam")
+  
+  method log takes nothing returns nothing
+    if (IsPlayerInForce(GetLocalPlayer(), this.Mteam)) then
+        // Use only local code (no net traffic) within this block to avoid desyncs.
+        call DisplayTimedTextToPlayer(GetLocalPlayer(), this.Mpoint.x , this.Mpoint.y, this.Mduration, this.Mmessage)
+    endif
+  endmethod
+  
+  method logs takes string asmessage returns nothing
+    set this.Mmessage = asmessage
+    call this.log()
+  endmethod
+  
+  static method create takes force afteam returns thistype
+    local thistype ttps = thistype.allocate()
+    if ttps == 0 then
+      return 0
+    endif
+    
+    set ttps.Mpoint = zclPoints.create(0, 0)
+    if ttps.Mpoint == 0 then
+      call ttps.destroy()
+      return 0
+    endif
+    
+    if afteam == null then
+      set ttps.Mteam = DefaultForce
+    else
+      set ttps.Mteam = afteam
+    endif
+    
+    return ttps
+  endmethod
+  
+  method destroy takes nothing returns nothing
+    if this != 0 then
+      
+      call this.Mpoint.destroy()
+      // 在手动解析之后 调用系统解析 回收编号
+      call this.deallocate()
+    endif
+    debug call zclDebugs.log("zclLogs ... destroyed!")
+  endmethod
+endstruct
+
+globals
+  // switch
+  private boolean Ready = false
+endglobals
+
+private function init takes nothing returns nothing
+  local integer ip = 15
+  // prevent reinit
+  if Ready then
+    return
+  endif
+  
+  loop
+    exitwhen ip < 0
+    call ForceAddPlayer(DefaultForce, Player(ip))
+    set ip = ip - 1
+  endloop
+  
+  // switch off
+  set Ready = true
+endfunction
+
+
+endlibrary
+

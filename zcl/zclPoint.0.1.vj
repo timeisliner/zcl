@@ -1,0 +1,91 @@
+/*
+zclPoint.0.1.vj 2018-5-11 15:56:32
+
+0. copy >> zcPoint.0.3.vj 2018-5-3 19:02:01
+
+*/
+
+/*
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+*/
+
+library zclPoint initializer init
+
+globals
+  constant real zclPoint_Origin = 0
+  
+endglobals
+
+struct zclPoints
+//! textmacro TM_zclPoints_DSG takes METHOD, TYPE, VALUE, MEMBER
+  private $TYPE$ $MEMBER$ = $VALUE$             
+  method operator $METHOD$ takes nothing returns $TYPE$
+    return this.$MEMBER$
+  endmethod
+  method operator $METHOD$= takes $TYPE$ a$MEMBER$ returns nothing
+    set this.$MEMBER$ = a$MEMBER$
+  endmethod
+//! endtextmacro
+//! runtextmacro TM_zclPoints_DSG("x", "real", "0", "rx")
+//! runtextmacro TM_zclPoints_DSG("y", "real", "0", "ry")
+//! runtextmacro TM_zclPoints_DSG("z", "real", "0", "rz")
+  
+  private location lloc = null
+  method operator loc= takes location alloc returns nothing
+    set this.lloc = alloc
+    set this.rx = GetLocationX(this.lloc)
+    set this.ry = GetLocationY(this.lloc)
+  endmethod
+  method operator loc takes nothing returns location
+    if this.lloc == null then
+      set this.lloc = Location(this.rx, this.ry)
+    elseif this.rx != GetLocationX(this.lloc) or this.ry != GetLocationY(this.lloc) then
+      call MoveLocation(this.lloc, this.rx, this.ry)
+    endif
+    return this.lloc
+  endmethod
+
+  static method create takes real arx, real ary returns thistype
+    local thistype ttps = thistype.allocate()
+    if ttps == 0 then
+      return 0
+    endif
+    
+    set ttps.rx = arx
+    set ttps.ry = ary
+    
+    return ttps
+  endmethod      
+
+  method destroy takes nothing returns nothing
+    if this != 0 then
+      
+      
+      // 在手动解析之后 调用系统解析 回收编号
+      call this.deallocate()
+    endif
+    debug call zclDebugs.log("zclPoints ... destroyed!")
+  endmethod
+
+endstruct
+
+globals
+  // switch
+  private boolean Ready = false
+endglobals
+
+private function init takes nothing returns nothing
+  // prevent reinit
+  if Ready then
+    return
+  endif
+  
+  
+  // switch off
+  set Ready = true
+endfunction
+
+endlibrary
+
+

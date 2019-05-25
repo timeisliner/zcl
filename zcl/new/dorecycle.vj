@@ -1,0 +1,90 @@
+  private static method recycle takes nothing returns nothing
+    // SuLastingRecycleCaches 中 索引 0 是回收位
+    // 所以 对 up0 进行回收
+    local unit up0 = SuLastingRecycleCaches[0]
+    
+    // 清除数据
+    call IssueImmediateOrder(up0, "stop")// bugfix, see: http://www.wc3c.net/showpost.php?p=1131163&postcount=5
+    call UnitRemoveAbility(up0, GetUnitUserData(up0))
+    call SetUnitUserData(up0, 0)
+    call SetUnitFlyHeight(up0, 0, 0)
+    call PauseUnit(up0, false)
+    // 是否 缓存 假态
+    if SiLastingCachesCount == DUMMY_STACK_LIMIT then // Count
+      // 否
+      call RemoveUnit(up0)
+    else
+      // 是
+      set SuLastingCaches[SiLastingCachesCount] = up0     // Vernier
+      set SiLastingCachesCount = SiLastingCachesCount + 1 // Count
+    endif
+    
+    set SuLastingRecycleCount = SuLastingRecycleCount - 1 // Count
+    set up0 = null
+  endmethod
+  
+  private static method recycleLoop takes nothing returns nothing
+    // 当 SuLastingRecycleCaches 回收位 空置且 SuLastingRecycleCount 不为 0
+    // 则需要为 回收位 筛选出 SuLastingRecycleExpire 中[最小持续时间的|最快到期] 的 假态
+    // 同时 进行跳跃式 排序 粗略排序
+    local integer ipexchange // Vernier 空置位  >> 0 是 回收位，只有存放 0 位的假态才能被回收
+    local integer ipnx1      // Vernier 奇数 ipexchange * 2 + 1 >> 1 3 5 7 9  11
+    local integer ipnx2      // Vernier 偶数 ipexchange * 2 + 2 >> 2 4 6 8 10 12
+    
+    local integer iplast     // Vernier 等于 Count
+    local real    rplast     // Value
+
+    // 100
+    // 0    1   3   7   15  31  63 
+    // 1    3   7   15  31  63  127
+    // 2    4   8   16  32  64
+    
+    // 0    2   6   14  30  62
+    // 1    5   13  29  61  125
+    // 2    6   14  30  62
+    set ipexchange = 0
+    set iplast = SuLastingRecycleCount
+    
+    set rplast = SuLastingRecycleExpire[iplast] // Vernier -last
+    loop
+      set ipnx1 = ipexchange * 2 + 1
+      exitwhen ipnx1 >= iplast // Vernier
+      set ipnx2 = ipexchange * 2 + 2
+      if ipnx2 >= iplast then // Vernier
+        if SuLastingRecycleExpire[ipnx1] < rplast then 
+            set SuLastingRecycleExpire[ipexchange] = SuLastingRecycleExpire[ipnx1]
+            set SuLastingRecycleCaches[ipexchange] = SuLastingRecycleCaches[ipnx1]
+            set ipexchange = ipnx1
+        else
+            exitwhen true
+        endif
+      elseif rplast <= SuLastingRecycleExpire[ipnx1] and rplast <= SuLastingRecycleExpire[ipnx2] then
+          exitwhen true
+      elseif SuLastingRecycleExpire[ipnx1] < SuLastingRecycleExpire[ipnx2] then
+          set SuLastingRecycleExpire[ipexchange] = SuLastingRecycleExpire[ipnx1]
+          set SuLastingRecycleCaches[ipexchange] = SuLastingRecycleCaches[ipnx1]
+          set ipexchange = ipnx1
+      else
+          set SuLastingRecycleExpire[ipexchange] = SuLastingRecycleExpire[ipnx2]
+          set SuLastingRecycleCaches[ipexchange] = SuLastingRecycleCaches[ipnx2]
+          set ipexchange = ipnx2
+      endif
+    endloop
+    set SuLastingRecycleExpire[ipexchange] = rplast
+    set SuLastingRecycleCaches[ipexchange] = SuLastingRecycleCaches[iplast]
+    set SuLastingRecycleExpire[iplast] = 0.0
+    set SuLastingRecycleCaches[iplast] = null
+    call TimerStart(Stimer, SuLastingRecycleExpire[0] - TimerGetElapsed(SgameTimer), false, function xecast.onRecycle)
+  endmethod
+  
+  private static method onRecycle takes nothing returns nothing
+    call thistype.recycle()
+    
+    if SuLastingRecycleCount == 0 then  // Count
+        return
+    endif
+    redirect
+    call thistype.recycleLoop()
+    
+    call thistype.recycleTiming()
+  endmethod

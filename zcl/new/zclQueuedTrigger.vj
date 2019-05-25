@@ -1,0 +1,186 @@
+
+
+
+
+链表
+LinkedList
+prev  -1
+self  0
+next  -1
+
+特殊部分
+
+链表首部  索引 start
+  prev  >> 链表尾部
+  next
+链表尾部  索引 end
+  prev
+  next  >> 链表首部
+链表添加
+  新值    new
+    prev  
+    next
+链表减少
+  移除    remove
+    prev  该值存储的索引的next >> next
+    next  该值存储的索引的prev >> prev
+integer array
+prev
+next
+
+i 0 1 2 3 4 5 6 7 8 9 10 11 12 ...
+trigger array     触发器
+v +
+real    array     定时
+v +
+
+c 1
+
+count >> 0
+i = -1   无效
+prev[i]  非法
+next[i]  非法
+
+count >> 1  2
+i = 0       1
+prev[i]     
+next[i]
+
+
+
+trigger data array 排序的
+i    0
+v    1
+trigger array
+i    0
+v    1
+prev 0
+self i
+next 0
+First
+Min = 0
+Max = 0
+Count = 1
+
+trigger data array 排序的
+i    0  1
+v    1  1
+trigger array
+i    0  1
+v    1  1
+prev 1  0
+self i  i
+next 1  0
+Min = 0
+Max = 1
+Count = 2
+
+trigger data array 排序的
+i    0  1 2
+v    1  1 1
+trigger array
+i    0  1 2
+v    1  1 1
+prev 2  1 1
+self i  i i
+next 1  2 0
+Min = 0
+Max = 2
+Count = 3
+
+
+trigger data array 排序的
+i    0  1 2 3
+v    1  1 1 1
+trigger array
+i    0  1 2 3
+v    1  1 1 1
+prev 3  0 1 2
+self i  i i i
+next 1  2 3 0
+Min = 0
+Max = 3
+Count = 4
+
+
+
+
+
+
+trigger array
+移除 i=3 >> v=0
+i    0 1 2 3 4 5 6 .... n
+v    1 1 1 0 1 0 0 .... 0
+LatestRemoveVernier = 3
+LatestVernier = 4
+Count = 4
+填补空白
+移动 i LatestVernier >> LatestRemoveVernier
+trigger array
+i    0 1 2 3 4 5 6 .... n
+v    1 1 1 1 0 0 0 .... 0
+LatestRemoveVernier = -1
+LatestVernier = 3
+Count = 4
+
+
+globals
+  
+  private trigger array QueueTriggers
+  private boolean array QueueConditions
+  private integer QueueCount                  = 0
+  
+  private trigger QueueWatchTrigger           = null
+  private timer   QueueWatchTimer             = null
+  
+endglobals
+
+//===========================================================================
+// Removes a trigger from the trigger queue, shifting other triggers down
+// to fill the unused space.  If the currently running trigger is removed
+// in this manner, this function does NOT attempt to run the next trigger.
+//
+function QueuedTriggerRemoveByIndex takes integer aindex returns boolean
+    local integer index
+
+    // If the to-be-removed index is out of range, fail.
+    if (aindex >= QueueCount) then
+        return false
+    endif
+
+    // Shift all queue entries down to fill in the gap.
+    set QueueCount = QueueCount - 1
+    set index = aindex
+    loop
+        exitwhen index >= QueueCount
+        set bj_queuedExecTriggers[index] = bj_queuedExecTriggers[index + 1]
+        set bj_queuedExecUseConds[index] = bj_queuedExecUseConds[index + 1]
+        set index = index + 1
+    endloop
+    return true
+endfunction
+
+//===========================================================================
+// Denotes the end of a queued trigger. Be sure to call this only once per
+// queued trigger, lest you step on the toes of other queued triggers.
+//
+function doneExec takes nothing returns nothing
+    // Make sure there's something on the queue to remove.
+    if (QueueCount <= 0) then
+        return
+    endif
+
+    // Remove the currently running trigger from the array.
+    call QueuedTriggerRemoveByIndex(0)
+
+    // If other triggers are waiting to run, run one of them.
+    call PauseTimer(QueueWatchTimer)
+    call QueuedTriggerAttemptExec()
+endfunction
+
+private function init takes nothing returns nothing
+  set QueueWatchTrigger = CreateTrigger()
+  set QueueWatchTimer = CreateTimer()
+  call TriggerRegisterTimerExpireEvent(QueueWatchTrigger, QueueWatchTimer)
+  call TriggerAddAction(QueueWatchTrigger, function doneExec)
+endfunction

@@ -1,0 +1,67 @@
+/* 
+zclTestTimer.0.1.vj 2018-5-15 13:05:41
+
+
+requires lib
+zclTable.0.1.vj 2018-5-12 9:21:02
+  zclTables
+zclLog.0.1.vj 2018-5-11 16:03:03
+  zclLogs
+zclTimerManager.0.1.vj 2018-5-13 16:16:22
+  zclTMTimers
+*/
+
+/*
+test lib
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+*/
+
+scope zclTest initializer init
+
+globals
+endglobals
+
+globals
+  private constant key TMTimerSys   // [系统] 计时器
+  
+  private boolean Tested = false
+  
+  private zclTables table = 0
+  private force f = CreateForce()
+  private zclLogs log = 0
+endglobals
+
+
+private function perSecond takes nothing returns nothing
+  // test code
+endfunction
+
+  // lib test init config method
+private function initTestConfig takes nothing returns nothing
+  local zclTMTimers tmt = zclTMTimers.create()
+  set log = zclLogs.create(f)
+  set table = zclTables.create()
+  
+  set table[TMTimerSys] = tmt
+  
+  call ForceAddPlayer(f, Player(0))
+
+  call tmt.start(1, true, function perSecond)
+endfunction
+
+private function init takes nothing returns nothing
+  // test
+  if Tested then
+    return
+  else
+    set Tested = true
+  endif
+  
+  // lib test init config method
+  call initTestConfig()
+
+endfunction
+
+
+endscope

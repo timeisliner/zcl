@@ -1,0 +1,91 @@
+/*
+zclTable.0.1.vj 2018-5-12 9:21:02
+
+0.  copy >> zcTable.0.3.1.vj 2018-5-10 12:27:26
+0.1 from >> F:\app\war3\lib\NewTable 4.1.0.1.vj
+
+*/
+
+/*
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+*/
+
+/*
+哈希表 - 数据缓存
+struct
+  zclTables extends array
+    static
+      create()thistype
+    destroy()
+    
+    [integer]
+    [integer]= thistype
+    
+    has(integer)boolean
+    remove(integer)
+    flush()
+  
+*/
+
+library zclTable
+
+globals
+  private constant integer KEY_SIZE = 0x4000 // 16384 个key变量
+
+  // 主表 MainHashTable - 初始化
+  private hashtable MHT = InitHashtable()
+  private integer MaxParentKey = KEY_SIZE // MHT 父键 游标起始位置，为了确保 IndexRecycleCache 不会被占用
+  // 原本为 8190 = JASS_MAX_ARRAY_SIZE - 2 = 8192 -2
+  // 为什么会是8190?我觉得是因为下面这个key类型变量Cache的问题,作者认为key基本上不需要用到8190个,所以在8190以后是安全的
+  //Configure it if you use more than 8190 "key" variables in your map (this will never happen though).
+  
+  // 回收再分配 缓存 ([v, k] - [v, k] - [v, k])
+  private constant key Cache
+  private constant integer LAST_CACHE = 0 // (MHT, Cache, IndexRecycleCacheVernier) = [v, k]
+endglobals
+
+// 栈
+// Recycles
+private struct Recycles
+  static method operator cache takes nothing returns zclTables
+    return Cache
+  endmethod
+endstruct
+
+// this > KEY_SIZE
+struct zclTables extends array
+//! textmacro TM_zclTables_OL takes METHOD, ARGS, RETURN, STATEMENT
+  method $METHOD$ takes $ARGS$ returns $RETURN$
+    $STATEMENT$
+  endmethod 
+//! endtextmacro
+//! runtextmacro TM_zclTables_OL("operator []", "integer ai", "thistype", "return LoadInteger(MHT, this, ai)")
+//! runtextmacro TM_zclTables_OL("operator []=", "integer ai, thistype atts", "nothing", "call SaveInteger(MHT, this, ai, atts)")
+//! runtextmacro TM_zclTables_OL("has", "integer ai", "boolean", "return HaveSavedInteger(MHT, this, ai)")
+//! runtextmacro TM_zclTables_OL("remove", "integer ai", "nothing", "call RemoveSavedInteger(MHT, this, ai)")
+//! runtextmacro TM_zclTables_OL("flush", "nothing", "nothing", "call FlushChildHashtable(MHT, this)")
+  
+  static method create takes nothing returns thistype
+    local thistype ttps = Recycles.cache[LAST_CACHE]
+    
+    if ttps == 0 then
+      set MaxParentKey = MaxParentKey + 1
+      set ttps = MaxParentKey
+    else
+      set Recycles.cache[LAST_CACHE] = Recycles.cache[ttps]
+      call Recycles.cache.remove(ttps)
+    endif
+    
+    return ttps
+  endmethod
+  
+  method destroy takes nothing returns nothing
+    set Recycles.cache[this] = Recycles.cache[LAST_CACHE]
+    set Recycles.cache[LAST_CACHE] = this
+    call this.flush()
+  endmethod
+endstruct
+
+endlibrary
+

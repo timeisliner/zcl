@@ -1,0 +1,47 @@
+/* 
+zclTest.0.1.vj 2018-5-12 8:49:29
+
+*/
+
+/*
+test lib
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+
+*/
+
+scope zclTest initializer init
+
+globals
+  private boolean Tested = false
+endglobals
+
+  // lib test method
+private function testZclDebug takes nothing returns nothing
+  call zclDebugs.log("GetCameraBoundMinX " + R2S(GetCameraBoundMinX()))                     // -2816
+  call zclDebugs.log("GetCameraBoundMinY " + R2S(GetCameraBoundMinY()))                     // -3328
+  call zclDebugs.log("GetCameraBoundMaxX " + R2S(GetCameraBoundMaxX()))                     // 2816
+  call zclDebugs.log("GetCameraBoundMaxY " + R2S(GetCameraBoundMaxY()))                     // 2816
+  call zclDebugs.log("CAMERA_MARGIN_LEFT " + R2S(GetCameraMargin(CAMERA_MARGIN_LEFT)))      // 512
+  call zclDebugs.log("CAMERA_MARGIN_BOTTOM " + R2S(GetCameraMargin(CAMERA_MARGIN_BOTTOM)))  // 256
+  call zclDebugs.log("CAMERA_MARGIN_RIGHT " + R2S(GetCameraMargin(CAMERA_MARGIN_RIGHT)))    // 512
+  call zclDebugs.log("CAMERA_MARGIN_TOP " + R2S(GetCameraMargin(CAMERA_MARGIN_TOP)))        // 256
+  
+  call zclDebugs.log("zclDebugs.log() ... ok!")
+endfunction
+
+private function init takes nothing returns nothing
+  // test
+  if Tested then
+    return
+  else
+    set Tested = true
+  endif
+  
+  // lib test method
+  call testZclDebug()
+
+endfunction
+
+
+endscope

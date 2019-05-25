@@ -1,0 +1,129 @@
+/* 
+zclTableTestLimit.0.1.vj 2018-5-14 17:28:32
+
+*/
+
+/*
+test lib
+zclTable.0.1.vj 2018-5-12 9:21:02
+zclTimerManager.0.1.vj 2018-5-13 16:16:22
+
+
+*/
+
+scope zclTableTest initializer init
+
+globals
+  private key TMTimerSys   // [系统] 计时器
+endglobals
+
+globals
+  private boolean Tested = false
+  
+  
+  private zclTables table = 0
+  private force f = CreateForce()
+  private zclLogs log = 0
+
+
+endglobals
+
+
+globals
+  // 循环 0x4000 - 16384 次创建 zclTables ... ok
+  // 每秒 40 个
+  private integer i = 0x4000
+  
+  private integer j = 0
+  private integer k = 0
+endglobals
+private function OnzclTableTest takes nothing returns nothing
+  loop
+    exitwhen i == 0
+    
+    if j == 40 then
+      set j = 0
+      return
+    endif
+    call log.logs("zclTables : " + I2S(table) + " i : " + I2S(i) + " k : " + I2S(k))
+    set j = j + 1
+    set k = k + 1
+    set i = i - 1
+    set table = zclTables.create()
+  endloop
+
+endfunction
+
+
+globals
+  // zclTMTimers 测试
+  private constant key TMTimerTemp   // [临时] 计时器
+  
+  private integer count = 0
+  private integer decount = 300
+endglobals
+private function OnzclTimerManagerTestLimit takes nothing returns nothing
+  // zclTMTimers 测试
+  local integer iptemp = 10
+  
+  loop
+    exitwhen iptemp == 0
+    set table[TMTimerSys] = zclTMTimers.create()
+    set iptemp = iptemp - 1
+  endloop
+  call zcTimerManagers.T_Status()
+endfunction
+private function OnzclTimerManagerTestCache takes nothing returns nothing
+  // zclTMTimers 测试
+  local integer iptemp = 10
+  call zcTimerManagers.T_Status()
+  loop
+    exitwhen iptemp == 0
+    
+    if count > 300 then
+      set decount = decount - 1
+      call zclTMTimers(zcTimerManagers.T_Instance(decount)).destroy()
+      // call zclTMTimers(table[TMTimerSys]).destroy()
+      call zcTimerManagers.T_Status()
+      return
+    endif
+    set table[TMTimerSys] = zclTMTimers.create()
+    set count = count + 1
+    set iptemp = iptemp - 1
+  endloop
+endfunction
+
+private function toLoopLimit takes nothing returns nothing
+  local zclTMTimers tmt = zclTMTimers.create()
+  set log = zclLogs.create(f)
+  set table = zclTables.create()
+  
+  set table[TMTimerSys] = tmt
+  
+  call ForceAddPlayer(f, Player(0))
+
+  call tmt.start(1, true, function OnzclTimerManagerTestCache)
+endfunction
+
+
+  // lib test method
+private function testzclTable takes nothing returns nothing
+  // zclTables table = zclTables.create()
+  call toLoopLimit()
+endfunction
+
+private function init takes nothing returns nothing
+  // test
+  if Tested then
+    return
+  else
+    set Tested = true
+  endif
+  
+  // lib test method
+  call testzclTable()
+
+endfunction
+
+
+endscope

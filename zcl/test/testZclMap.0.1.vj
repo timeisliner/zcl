@@ -1,0 +1,63 @@
+/* 
+testZclMap.0.1.vj 2018-5-12 8:49:29
+
+*/
+
+/*
+test lib
+zclMap.0.1.vj 2018-5-12 15:10:41
+
+
+*/
+
+scope zclTest initializer init
+
+globals
+  private boolean Tested = false
+endglobals
+
+  // lib test method
+private function testZclMap takes nothing returns nothing
+  local rect map = bj_mapInitialPlayableArea
+
+  call zclDebugs.log("GetCameraBoundMinX " + R2S(GetCameraBoundMinX()))                     // -2816
+  call zclDebugs.log("GetCameraBoundMinY " + R2S(GetCameraBoundMinY()))                     // -3328
+  call zclDebugs.log("GetCameraBoundMaxX " + R2S(GetCameraBoundMaxX()))                     // 2816
+  call zclDebugs.log("GetCameraBoundMaxY " + R2S(GetCameraBoundMaxY()))                     // 2816
+  call zclDebugs.log("CAMERA_MARGIN_LEFT " + R2S(GetCameraMargin(CAMERA_MARGIN_LEFT)))      // 512
+  call zclDebugs.log("CAMERA_MARGIN_BOTTOM " + R2S(GetCameraMargin(CAMERA_MARGIN_BOTTOM)))  // 256
+  call zclDebugs.log("CAMERA_MARGIN_RIGHT " + R2S(GetCameraMargin(CAMERA_MARGIN_RIGHT)))    // 512
+  call zclDebugs.log("CAMERA_MARGIN_TOP " + R2S(GetCameraMargin(CAMERA_MARGIN_TOP)))        // 256
+  
+  
+  call zclDebugs.log("map MinX " + R2S(GetRectMinX(map )))        // -3328
+  call zclDebugs.log("map MinY " + R2S(GetRectMinY(map )))        // -3584
+  call zclDebugs.log("map MaxX " + R2S(GetRectMaxX(map )))        // 3328
+  call zclDebugs.log("map MaxY " + R2S(GetRectMaxY(map )))        // 3072
+  
+  call zclDebugs.log("GetRectMinX " + R2S(GetRectMinX(GetWorldBounds())))        // -4096
+  call zclDebugs.log("GetRectMinY " + R2S(GetRectMinY(GetWorldBounds())))        // -4096
+  call zclDebugs.log("GetRectMaxX " + R2S(GetRectMaxX(GetWorldBounds())))        // 4096
+  call zclDebugs.log("GetRectMaxY " + R2S(GetRectMaxY(GetWorldBounds())))        // 4096
+  
+  
+  CreateUnitAtLoc(, this.mst, this.pt.loc, 0)
+  
+  call zclDebugs.log("testZclMap ... ok!")
+endfunction
+
+private function init takes nothing returns nothing
+  // test
+  if Tested then
+    return
+  else
+    set Tested = true
+  endif
+  
+  // lib test method
+  call testZclMap()
+
+endfunction
+
+
+endscope

@@ -1,0 +1,604 @@
+/*
+zclXSpellCast.0.1.vj 2018-5-13 8:24:00
+
+0. copy >> F:\app\war3\lib\xe\libs\xecast 0.9.vj
+
+*/
+
+/*
+lib requires
+
+
+lib optional
+
+*/
+
+/*
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+
+*/
+
+/*
+技能施放系统
+MAX_INSTANCES               最大实例数量，Spell Cast System 结构实例
+INITIAL_DUMMY_COUNT         初始假态单位数量
+DUMMY_STACK_LIMIT           限制存在的假态单位数量
+Force_Visible               技能施放的目标是否会被玩家看见
+                            true 可见 影响性能
+                            false 不可见 提升性能
+AUTO_RESET_MANA_COOLDOWN    自动在假态单位施放技能之前重置其魔法值和技能冷却
+                            true 开启 影响性能
+                            false 关闭 提升性能
+                              如果确信所有假态单位是0 mana and cooldown cost
+                              则设置为false ? 暂不明确含义
+
+Epsilon                     精度常数
+                              
+zclXSpellCasts
+  
+  initialization()                初始化
+
+
+*/
+
+library zclXSpellCast initializer init requires zclXBasic
+
+globals
+  private constant integer MAX_INSTANCES            = 8190
+  private constant integer INITIAL_DUMMY_COUNT      = 12
+  private constant boolean Force_Visible            = true
+  private constant boolean AUTO_RESET_MANA_COOLDOWN = true 
+
+
+  private real Epsilon                      = 0.001
+endglobals
+
+private keyword initialization
+
+
+  // 技能效果 回收 缓存 等
+globals
+  private constant integer DUMMY_STACK_LIMIT        = 50
+  // 持续效果 已回收
+  private unit array       LastingCaches              // 假态单位 缓存
+  private integer          LastingCount      = 0      // Count 持续效果 已回收的
+                                                   // 最大值为 DUMMY_STACK_LIMIT
+  // 持续效果 待回收
+  private timer            RecycleTimer               // 持续效果 回收计时器
+  private unit array       RecycleCaches              // 持续效果 待回收的 单位缓存
+                                                   // 注意 只有索引 0 位置会被回收
+  private real array       RecycleExpires              // 持续效果 待回收的 到期时间
+                                                   // 即 技能效果持续时间+当前时间
+  private integer          RecycleCount     = 0       // Count 持续效果 待回收的
+  
+  
+  // 立即效果
+  private unit             ImmediateCache             // 立即效果 单位缓存
+  
+  // 游戏时间
+  private timer            GameTimer
+  
+  
+  // EVENT_UNIT_SPELL_ENDCAST
+  private trigger          SpellEndHandle                    // 假态单位相关 触发器 用于 PauseUnit 
+
+
+  private integer          TempVernier                       // 临时     游标
+  private integer          lastRecordVernier                 // 最后记录 游标
+  private real             LastRecordExpire                  // 最后记录 到期时间
+endglobals
+
+// 如果 RecycleCount>0 就需要对 RecycleCaches[0]进行分配
+// 选取 RecycleExpires 中值最小的
+private function rc0new takes nothing returns nothing
+    local integer vipnull       // Vernier 空置位  >> 0 是 回收位，只有存放 0 位的假态才能被回收
+    local integer vipnext1      // Vernier 奇数 vipnull * 2 + 1 >> 1 3 5 7 9  11
+    local integer vipnext2      // Vernier 偶数 vipnull * 2 + 2 >> 2 4 6 8 10 12
+    
+    local integer viplast       // Vernier 等于 Count
+    local real    rplastexpire
+    
+    set vipnull = 0
+    set viplast = RecycleCount
+    
+    set rplastexpire = RecycleExpires[viplast]
+    loop
+      set vipnext1 = vipnull * 2 + 1
+      exitwhen vipnext1 >= viplast
+      set vipnext2 = vipnull * 2 + 2
+      if vipnext2 >= viplast then
+        if RecycleExpires[vipnext1] < rplastexpire then 
+            set RecycleExpires[vipnull] = RecycleExpires[vipnext1]
+            set RecycleCaches[vipnull] = RecycleCaches[vipnext1]
+            set vipnull = vipnext1
+        else
+            exitwhen true
+        endif
+      elseif rplastexpire <= RecycleExpires[vipnext1] and rplastexpire <= RecycleExpires[vipnext2] then
+          exitwhen true
+      elseif RecycleExpires[vipnext1] < RecycleExpires[vipnext2] then
+          set RecycleExpires[vipnull] = RecycleExpires[vipnext1]
+          set RecycleCaches[vipnull] = RecycleCaches[vipnext1]
+          set vipnull = vipnext1
+      else
+          set RecycleExpires[vipnull] = RecycleExpires[vipnext2]
+          set RecycleCaches[vipnull] = RecycleCaches[vipnext2]
+          set vipnull = vipnext2
+      endif
+    endloop
+    set RecycleExpires[vipnull] = rplastexpire
+    set RecycleCaches[vipnull] = RecycleCaches[viplast]
+    set RecycleExpires[viplast] = 0.0
+    set RecycleCaches[viplast] = null
+endfunction
+
+// 对RecycleCaches[0]进行回收
+private function rc0Release takes nothing returns nothing
+    // RecycleCaches 中索引 0 是回收位 所以对 up0 进行回收
+    local unit up0 = RecycleCaches[0]
+    
+    // 清除数据
+    call IssueImmediateOrder(up0, "stop")// bugfix, see: http://www.wc3c.net/showpost.php?p=1131163&postcount=5
+    call UnitRemoveAbility(up0, GetUnitUserData(up0))
+    call SetUnitUserData(up0, 0)
+    call SetUnitFlyHeight(up0, 0, 0)
+    call PauseUnit(up0, false)
+    // 是否 缓存 假态
+    if LastingCount == DUMMY_STACK_LIMIT then // Count
+      // 否
+      call RemoveUnit(up0)
+    else
+      // 是
+      set LastingCaches[LastingCount] = up0 // Vernier
+      set LastingCount = LastingCount + 1 // Count
+    endif
+    
+    set RecycleCount = RecycleCount - 1 // Count
+    set up0 = null
+endfunction
+
+
+// 回收动作
+private function dorecycle takes nothing returns nothing
+  call rc0Release()
+  
+  if RecycleCount == 0 then  // Count
+      return
+  endif
+  
+  call rc0new()
+  
+  call TimerStart(RecycleTimer, RecycleExpires[0] - TimerGetElapsed(GameTimer), false, function dorecycle)
+endfunction
+
+
+
+private function onSpellEndCast takes nothing returns boolean
+  local unit up = GetTriggerUnit()
+  
+  if GetUnitUserData(up) != 0 then
+    call PauseUnit(up, true)
+  endif
+  //This is necessary, picture a value for recycle delay that's higher than the casting time,
+  //for example if the spell does dps, if you leave the dummy caster with the ability and it 
+  //is owned by an AI player it will start casting the ability on player units, so it is
+  // a good idea to pause it...
+  
+  set up = null
+  return true
+endfunction
+
+
+private function createDummy takes unit adummy, player aplayer returns unit
+  set adummy = CreateUnit(aplayer , zclXBasic_Dummy_Unit_ID, 0, 0, 0)
+  call TriggerRegisterUnitEvent(SpellEndHandle, adummy, EVENT_UNIT_SPELL_ENDCAST)
+  call UnitAddAbility(adummy, 'Aloc')   // 蝗虫技能
+  call UnitAddAbility(adummy, zclXBasic_Height_Model)
+  call UnitRemoveAbility(adummy, zclXBasic_Height_Model)
+  return adummy
+endfunction
+
+// AOE 范围技能
+globals
+  private group                AoeGroup         // 
+  private real                 AoeX             // 范围中心点 x 坐标
+  private real                 AoeY             // 范围中心点 y 坐标
+  private real                 AoeRadius        // 范围半径
+  private zclXSpellCasts       AoeXscInc        // 
+  private boolexpr             AoeFunc          // 技能提示 函数
+endglobals
+
+  // 技能提示 影响区域提示 影响单位提示 显示技能范围
+// Might look wrong, but this is the way to make it consider collision size, a spell that
+// got a target circle and uses this method will let the user know which units it will
+// hit with the mass cast.
+private function filterAOE takes nothing returns boolean
+  local unit upfilter = GetFilterUnit()
+  
+  if IsUnitInRangeXY(upfilter, AoeX, AoeY, AoeRadius) then
+    call AoeXscInc.castOnTarget(upfilter)
+  endif
+  
+  set upfilter = null
+  return false
+endfunction
+
+// Spell Cast System
+struct zclXSpellCasts[MAX_INSTANCES]
+  // 基础 公有成员
+  integer MabilityID    = 0           // AID 技能 ID (rawcode)
+  integer MabilityLv    = 0           // ALV 技能 Level
+  real    MrecycleDelay = 0.0         // ARD 回收延迟
+                                      // 有些技能的效果不是立即结束，存在持续伤害
+                                      // 该延迟就是持续时间
+  player  Mowner        = Player(15)  // AOW 假态单位归属玩家15
+                                      // 同时 玩家15 的单位类别归属为 targeteable
+
+  // 基础 私有成员
+  private integer MorderID      = 0       // OID 命令 ID，用于假态单位施放技能
+                                          // 直接分配一个 整数    如 288883
+                                          // 直接分配一个 字符串  如 superlightning
+                                          // 通过物体编辑器编辑 再分配
+  private boolean MautoDestroy  = false   // 是否 自动销毁 假态单位
+  method operator oidint= takes integer ai returns nothing 
+      set this.MorderID = ai
+  endmethod
+  method operator oidstr= takes string as returns nothing
+      set this.MorderID = OrderId(as)
+  endmethod
+
+  static method create takes nothing returns thistype                                            // 默认构造函数
+    local thistype ttps = thistype.allocate()
+    
+    if ttps == 0 then
+      debug call BJDebugMsg("所有zclXSpellCasts都已经被使用了，请确保没被使用的实例已经销毁，否则请提高MAX_INSTANCES")
+      return 0
+    endif
+  
+    return ttps
+  endmethod
+  static method CBasic takes integer aaid, integer aoid, player aaow returns thistype            // 构造函数
+    local thistype ttps = thistype.create()
+    
+    set ttps.MabilityID     = aaid
+    set ttps.MorderID       = aoid
+    set ttps.Mowner         = aaow
+    
+    return ttps
+  endmethod
+  static method CBasicAutoDestroy takes integer aaid, integer aoid, player aaow returns thistype // 构造函数
+    local thistype ttps = thistype.CBasic(aaid, aoid, aaow)
+    set ttps.MautoDestroy = true
+    return ttps
+  endmethod
+  static method CAutoDestroy takes nothing returns thistype                                      // 构造函数
+    local thistype ttps = thistype.create()
+    set ttps.MautoDestroy   = true
+    return ttps
+  endmethod
+
+
+  // Point 指向性技能 公有成员
+  boolean Msource       = false       // 是否使用 自定义技能效果 以下成员须在true时才能生效
+  real    MsourceX                    // 自定义技能效果 目标点 x 坐标
+  real    MsourceY                    // 自定义技能效果 目标点 y 坐标
+  real    MsourceZ      = 0.0         // 自定义技能效果 目标点 z 坐标
+  method setSourcePoint takes real ax, real ay, real az returns nothing
+    set this.MsourceX = ax
+    set this.MsourceY = ay
+    set this.MsourceZ = az
+    set this.Msource = true
+  endmethod
+  method setSourceLoc takes  location aloc, real az returns nothing
+    call this.setSourcePoint(GetLocationX(aloc), GetLocationY(aloc), az)
+  endmethod
+
+
+  
+  // 分配 假态 单位
+  private method alloc takes unit adummy returns unit
+    if this.MrecycleDelay < Epsilon then
+      // 立即效果
+      set adummy = ImmediateCache   // 设置 假态单位实例
+      call SetUnitOwner(adummy, this.Mowner, false)  // 将 假态单位 转给 技能施放单位所属玩家
+    elseif LastingCount > 0 then // 假态单位 缓存数量
+      // 持续效果 取得最顶端的缓存 假态单位
+      set LastingCount = LastingCount - 1
+      set adummy = LastingCaches[LastingCount]
+      call SetUnitOwner(adummy, this.Mowner, false)
+    else
+      // 持续效果 且 假态单位的实例缓存队列中 没有 假态实例
+      // 创建一个新的 假态实例
+      
+      set adummy = createDummy(adummy, this.Mowner)
+    endif
+    
+    call UnitAddAbility(adummy, this.MabilityID)
+    static if AUTO_RESET_MANA_COOLDOWN then
+        call UnitResetCooldown(adummy)
+        call SetUnitState(adummy, UNIT_STATE_MANA, 10000.0)
+    endif
+    if this.MabilityLv > 1 then
+        call SetUnitAbilityLevel(adummy, this.MabilityID, this.MabilityLv)
+    endif
+    
+    return adummy
+  endmethod
+
+  // 回收 假态 单位
+  private method dealloc takes unit adummy returns unit
+    if this.MrecycleDelay >= Epsilon then // 回收延迟 大于 最小精度
+      // 持续效果
+      set LastRecordExpire = TimerGetElapsed(GameTimer) + this.MrecycleDelay // 记录 持续效果到期时间
+      set lastRecordVernier = RecycleCount
+      set RecycleCount = RecycleCount + 1
+      // 
+      // lastRecordVernier 被放置的位置       n   ... 8 7 6 5 4 3 2 1 [0 表示只有一个值,不需要查验]
+      // TempVernier 查验的位置           (n-1)/2 ... 3 3 2 2 1 1 0 0 -
+      // 关系 TempVernier = (lastRecordVernier - 1) / 2
+      // 这里并不需要严格的按持续时间长短依次排序 这是跳跃式的
+      loop
+        // 索引计算
+        exitwhen lastRecordVernier == 0  // 索引 0
+        set TempVernier = (lastRecordVernier - 1) / 2 // (索引 - 1) / 2
+        exitwhen RecycleExpires[TempVernier] <= LastRecordExpire
+        // 数据移动
+        set RecycleCaches[lastRecordVernier] = RecycleCaches[TempVernier]
+        set RecycleExpires[lastRecordVernier]= RecycleExpires[TempVernier]
+        // 索引改变
+        set lastRecordVernier = TempVernier
+      endloop
+      // 数据添加
+      set RecycleExpires[lastRecordVernier] = LastRecordExpire
+      set RecycleCaches[lastRecordVernier] = adummy
+      // 关联 技能
+      call SetUnitUserData(adummy, this.MabilityID)
+      call TimerStart(RecycleTimer, RecycleExpires[0] - TimerGetElapsed(GameTimer), false, function dorecycle)
+      //call TimerStart(RecycleTimer, RecycleExpires[0] - TimerGetElapsed(GameTimer), false, function thistype.dorecycle)
+    else
+      // 立即效果
+      call SetUnitUserData(adummy, 0)
+      call SetUnitFlyHeight(adummy, 0, 0)
+      call UnitRemoveAbility(adummy, this.MabilityID)
+    endif
+    
+    return adummy
+  endmethod
+  
+  
+//==========================================================================================================
+// So, create the dummy, assign options and cast the skill!
+// .castOnTarget(u)       : If you want to hit a unit u with the ability, supports FORCE_INVISIBLE_CAST.
+// .castOnWidgetTarget(w) : If you want to hit a widget w with the ability.
+// .castOnPoint(x,y)      : If you want to hit a point (x,y) with the ability.
+// .castInPoint(x,y)      : For spells like warstomp which do not have a target.
+// .castOnAOE(x,y,radius) : Classic area of effect cast. Considers collision size.
+// .castOnGroup(g)        : Cast unit the unit group g, notice it will empty the group yet not destroy it.
+//
+  
+  // 指向性技能
+  private method onTargetPoint takes unit adummy, real ax, real ay  returns unit
+    if this.Msource then
+      call SetUnitX(adummy, this.MsourceX)
+      call SetUnitY(adummy, this.MsourceY)
+      call SetUnitFlyHeight(adummy, this.MsourceZ, 0.0)
+    else
+      call SetUnitX(adummy, ax)
+      call SetUnitY(adummy, ay)
+    endif
+    return adummy
+  endmethod
+  private method onTarget takes unit adummy, widget atarget returns unit
+    return onTargetPoint(adummy, GetWidgetX(atarget), GetWidgetY(atarget))
+  endmethod
+  method castOnTarget takes unit atarget returns nothing
+    local unit updummy = null
+    
+    set updummy = this.alloc(updummy)
+    
+    set updummy = this.onTarget(updummy, atarget)
+    
+    static if Force_Visible then  // 默认可见
+      // 可见
+      call IssueTargetOrderById(updummy, this.MorderID, atarget)
+    else
+      // 不可见
+      call UnitShareVision(atarget, this.Mowner, true)
+      call IssueTargetOrderById(updummy, this.MorderID, atarget)
+      call UnitShareVision(atarget, this.Mowner, false)
+    endif
+    
+    set updummy = this.dealloc(updummy)
+    
+    if this.MautoDestroy then
+      call this.destroy()
+    endif
+    
+    set updummy = null
+  endmethod
+    //accepts units, items and destructables, if you know it is
+    // a unit it is better to use castOnTarget since that would
+    // be able to use FORCE_INVISIBLE_CAST if necessary.
+    //
+  method castOnWidgetTarget takes widget atarget returns nothing
+    local unit updummy = null
+
+    set updummy = this.alloc(updummy)
+    
+    set updummy = this.onTarget(updummy, atarget)
+
+    call IssueTargetOrderById(updummy, this.MorderID, atarget)
+  
+    set updummy = this.dealloc(updummy)
+      
+    if this.MautoDestroy then
+      call this.destroy()
+    endif
+    set updummy = null
+  endmethod
+  method castOnPoint takes real ax, real ay returns nothing
+    local unit updummy = null
+    
+    set updummy = this.alloc(updummy)
+    
+    set updummy = onTargetPoint(updummy, ax, ay)
+
+    call IssuePointOrderById(updummy, this.MorderID, ax, ay)
+
+    set updummy = this.dealloc(updummy)
+    
+    if this.MautoDestroy then
+      call this.destroy()
+    endif
+    set updummy = null
+  endmethod
+  method castOnLoc takes location aloc returns nothing
+    //debug call BJDebugMsg("Warning: Locations are in use")
+    //nah but I should 
+    call this.castOnPoint(GetLocationX(aloc), GetLocationY(aloc))
+  endmethod
+  //ignores custom source x and y (for obvious reasons)
+  method castInPoint takes real ax, real ay returns nothing
+    local unit updummy = null
+    
+    set updummy = this.alloc(updummy)
+    
+    if this.Msource then
+      call SetUnitFlyHeight(updummy, this.MsourceZ, 0.0)
+    endif
+    call SetUnitX(updummy, ax)
+    call SetUnitY(updummy, ay)
+    call IssueImmediateOrderById(updummy, this.MorderID)
+    
+    set updummy = this.dealloc(updummy)
+    
+    if this.MautoDestroy then
+      call this.destroy()
+    endif
+    set updummy = null
+  endmethod
+  method castInLoc takes location aloc returns nothing
+    //debug call BJDebugMsg("Warning: Locations are in use")
+    //nah but I should 
+    call this.castInPoint(GetLocationX(aloc), GetLocationY(aloc))
+  endmethod
+  
+  // AOE 范围技能
+  method castOnAOE takes real ax, real ay, real aradius returns nothing
+    local boolean bpad = this.MautoDestroy
+
+    if bpad then
+      set this.MautoDestroy = false
+    endif
+    set AoeX = ax
+    set AoeY = ay
+    set AoeRadius = aradius
+    set AoeXscInc = this
+    call GroupEnumUnitsInRange(AoeGroup, ax, ay, aradius + zclXBasic_Max_Collision , AoeFunc)
+    if bpad then
+      call this.destroy()
+    endif
+  endmethod
+  method castOnAOELoc takes location aloc, real aradius returns nothing
+    call this.castOnAOE(GetLocationX(aloc), GetLocationY(aloc), aradius)
+  endmethod
+  method castOnGroup takes group agroup returns nothing
+    local boolean bpad = this.MautoDestroy 
+    local unit uptemp = null
+    if bpad then
+      set this.MautoDestroy = false
+    endif
+  
+    loop
+        set uptemp = FirstOfGroup(agroup)
+        exitwhen uptemp == null
+        call GroupRemoveUnit(agroup, uptemp)
+        call this.castOnTarget(uptemp)
+    endloop
+    if bpad then
+      call this.destroy()
+    endif
+  endmethod
+  
+  method destroy takes nothing returns nothing
+    if this != 0 then
+      
+      
+      // 在手动解析之后 调用系统解析 回收编号
+      call this.deallocate()
+    endif
+    debug call zclDebugs.log("结构名 ... destroyed!")
+  endmethod
+
+ 
+  static method initialization takes nothing returns nothing
+    local integer ipcount = INITIAL_DUMMY_COUNT + 1
+    local unit updummy = null
+    
+    set AoeFunc = Condition(function filterAOE)
+    set AoeGroup = CreateGroup()
+    set SpellEndHandle = CreateTrigger()
+    
+
+    loop
+      exitwhen ipcount == 0
+      
+      //set updummy = 
+      call createDummy(updummy, Player(15))
+      
+      set LastingCaches[LastingCount] = updummy
+      set LastingCount = LastingCount + 1
+      set ipcount = ipcount - 1
+    endloop
+    call TriggerAddCondition(SpellEndHandle, Condition(function onSpellEndCast))
+    set LastingCount = LastingCount - 1
+    set ImmediateCache = LastingCaches[LastingCount]
+    set LastingCaches[LastingCount] = null
+    set RecycleTimer = CreateTimer()
+    set GameTimer = CreateTimer()
+    call TimerStart(GameTimer, 12*60*60 , false, null)
+    
+    set updummy = null
+  endmethod
+endstruct
+
+
+private function testhelper takes nothing returns nothing
+  local integer ip = LastingCount
+  local unit updummy = null
+  call  zclDebugs.log("LastingCount" + I2S(LastingCount))
+  loop
+    exitwhen ip == 0
+    set updummy = LastingCaches[ip]
+    call  zclDebugs.log("LastingCaches[" + I2S(ip) + "] x : " + R2S(GetWidgetX(updummy)) + " y : " + R2S(GetWidgetY(updummy)))
+    
+    set ip = ip - 1
+  endloop
+    
+endfunction
+
+globals
+  // switch
+  private boolean Ready = false
+endglobals
+
+private function init takes nothing returns nothing
+  // prevent reinit
+  if Ready then
+    return
+  endif
+  
+  // init
+  call zclXSpellCasts.initialization()
+
+  call testhelper()
+  
+  // switch off
+  set Ready = true
+endfunction
+
+
+endlibrary
+
+

@@ -1,0 +1,194 @@
+/* 
+testStruct.0.1.vj 2018-5-15 12:59:00
+
+@>>
+zclTestTimer.0.1.vj 2018-5-15 13:05:41
+
+
+requires lib
+zclTable.0.1.vj 2018-5-12 9:21:02
+  zclTables
+zclLog.0.1.vj 2018-5-11 16:03:03
+  zclLogs
+zclTimerManager.0.1.vj 2018-5-13 16:16:22
+  zclTMTimers
+*/
+
+/*
+test lib
+zclDebug.0.1.vj 2018-5-11 15:22:20
+
+*/
+
+scope zclTest initializer init
+
+
+globals
+  private constant key TMTimerSys   // [系统] 计时器
+  
+  private boolean Tested = false
+  
+  private zclTables table = 0
+  private force f = CreateForce()
+  private zclLogs out = 0
+endglobals
+
+
+// 确实是 8192个限制
+struct Textabcs
+  string i = "ii"
+  string c = "cc"
+  // 构造函数
+  static method create takes nothing returns thistype
+    local thistype ttps = thistype.allocate()
+    if ttps == 0 then
+      debug call zclDebugs.log("严重错误: Textabcs ... 创建失败...有没有对不需要的结构实例放任不管？？")
+      return 0
+    endif
+    
+    return ttps
+  endmethod
+
+  // 解析函数
+  method destroy takes nothing returns nothing
+    // 在手动解析之后 调用系统解析
+    call this.deallocate()
+    if this != 0 then
+      
+      
+      // 在手动解析之后 调用系统解析 回收编号
+      call this.deallocate()
+    endif
+    debug call zclDebugs.log("Textabcs ... destroyed!")
+  endmethod
+endstruct
+private function perSecond4Textabcs takes nothing returns nothing
+  // test code
+  local integer ip = 40
+  local Textabcs tab = 0
+  
+  loop 
+    exitwhen ip == 0
+    set tab = Textabcs.create()
+    call out.logs("tab: " + I2S(tab) + " tab.i " + tab.i + " tab.c " + tab.c)
+    set ip = ip - 1
+  endloop
+endfunction
+
+// 确实是 数组限制个数 / 数组成员大小 得出的实力个数  下面是80   >> 80 * 100 = 8000
+struct TextArrayMember
+  string i = "ii"
+  string array ddd[100]
+  // 构造函数
+  static method create takes nothing returns thistype
+    local thistype ttps = thistype.allocate()
+    if ttps == 0 then
+      debug call zclDebugs.log("严重错误: textarraymember ... 创建失败...有没有对不需要的结构实例放任不管？？")
+      return 0
+    endif
+    
+    return ttps
+  endmethod
+
+  // 解析函数
+  method destroy takes nothing returns nothing
+    // 在手动解析之后 调用系统解析
+    call this.deallocate()
+    if this != 0 then
+      
+      
+      // 在手动解析之后 调用系统解析 回收编号
+      call this.deallocate()
+    endif
+    debug call zclDebugs.log("textarraymember ... destroyed!")
+  endmethod
+endstruct
+private function perSecond4TextArrayMember takes nothing returns nothing
+  // test code
+  local integer ip = 1
+  local TextArrayMember am = 0
+  
+  loop 
+    exitwhen ip == 0
+    set am = TextArrayMember.create()
+    call out.logs("am: " + I2S(am) + " am.i " + am.i)
+    set ip = ip - 1
+  endloop
+endfunction
+
+// 对结构 TestStruct0Zero(0) 存取值 测试
+// 结果是 0 - 8191 可以存取值 不通过create方法也一样
+// 超过 8191 如 8192 == 就没有值存贮了,  而且 8192会被当做普通的整数处理
+struct TestStruct0Zero
+  integer i = 0x111
+  string name = "这是 结构 0"
+  string info = "好了就这样"
+endstruct
+private function perSecond4TestStruct0Zero takes nothing returns nothing
+  local TestStruct0Zero zero = 0
+  local zclTMTimers tptimer = table[TMTimerSys]
+  call out.logs("zero: " + I2S(zero) + " zero.i " + I2S(zero.i) + " zero.name " + zero.name + " zero.info " + zero.info)
+  set zero.i = 0x119 + R2I(tptimer.timeout)
+  set zero.name = "这是你妹的"
+  set zero.info = "这是你大爷的"
+  call tptimer.off()
+endfunction
+
+globals
+  // private integer TestStructUnCreateCount = 0
+  private integer TestStructUnCreateCount = 8180
+  private boolean zeroSwitch = false  // 设置 0 的值与否
+endglobals
+// 对未使用create方法的结构 TestStructUnCreate (1 2 3 4 5) 存取值 测试
+struct TestStructUnCreate
+  integer i = 0x111
+  string name = "这是 结构 0"
+  string info = "好了就这样"
+endstruct
+private function perSecond4TestStructUnCreate takes nothing returns nothing
+  local TestStruct0Zero zero = 0
+  
+  if not zeroSwitch then
+    set zero.i = 18555
+    set zero.name = "这是你妹的灵丹"
+    set zero.info = "这是你大爷的零蛋"
+    set zeroSwitch = true
+  endif
+  call out.logs("zero: " + I2S(zero) + " zero.i " + I2S(zero.i) + " zero.name " + zero.name + " zero.info " + zero.info)
+  
+  set TestStructUnCreateCount = TestStructUnCreateCount + 1
+  set zero = TestStructUnCreateCount
+  set zero.i = TestStructUnCreateCount
+  set zero.name = "这是你妹的"
+  set zero.info = "这是你大爷的"
+  call out.logs("zero: " + I2S(zero) + " zero.i " + I2S(zero.i) + " zero.name " + zero.name + " zero.info " + zero.info)
+endfunction
+
+  // lib test init config method
+private function initTestConfig takes nothing returns nothing
+  local zclTMTimers tmt = zclTMTimers.create()
+  set out = zclLogs.create(f)
+  set table = zclTables.create()
+  
+  set table[TMTimerSys] = tmt
+  
+  call ForceAddPlayer(f, Player(0))
+
+  call tmt.start(1, true, function perSecond4TestStructUnCreate)
+endfunction
+
+private function init takes nothing returns nothing
+  // test
+  if Tested then
+    return
+  else
+    set Tested = true
+  endif
+  
+  // lib test init config method
+  call initTestConfig()
+
+endfunction
+
+
+endscope
